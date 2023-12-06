@@ -1,0 +1,55 @@
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SparkSession
+
+object SerializableTest {
+
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder().getOrCreate()
+
+    val a = new ClassA("a")
+    val b = new ClassB("b", spark, a)
+    val c = new ClassC("c", spark, a)
+
+    // Success!!
+    // Output: 0, b, a, 1, b, a, 2, b, a, 3, b, a, 4, b, a, 5, b, a, 6, b, a, 7, b, a, 8, b, a, 9, b, a
+    println(b.result().mkString(", "))
+
+    // Failed!!
+    // Caused by: java.io.NotSerializableException: com.aliyun.lindorm.ldspark.examples.ClassA
+    //Serialization stack:
+    //	- object not serializable (class: com.aliyun.lindorm.ldspark.examples.ClassA, value: com.aliyun.lindorm.ldspark.examples.ClassA@37f71e8)
+    //	- field (class: com.aliyun.lindorm.ldspark.examples.ClassC, name: a, type: class com.aliyun.lindorm.ldspark.examples.ClassA)
+    //	- object (class com.aliyun.lindorm.ldspark.examples.ClassC, com.aliyun.lindorm.ldspark.examples.ClassC@64e657b0)
+    println(c.result().mkString(", "))
+  }
+
+}
+
+class ClassA(name: String) {
+  def getName(): String = name
+}
+
+class ClassB(name: String, spark: SparkSession, a: ClassA) {
+
+  private def getRDD: RDD[Int] = {
+    val data = 0 until (10)
+    spark.sparkContext.makeRDD(data, 2)
+  }
+
+  def result(): Array[String] = {
+    val name = this.name
+    val aName = a.getName()
+    getRDD.map { i => s"$i, $name, $aName" }.collect()
+  }
+}
+
+class ClassC(name: String, spark: SparkSession, a: ClassA) extends Serializable {
+  private def getRDD: RDD[Int] = {
+    val data = 0 until (100)
+    spark.sparkContext.makeRDD(data, 2)
+  }
+
+  def result(): Array[String] = {
+    getRDD.map { i => s"$i, $name, ${a.getName()}" }.collect()
+  }
+}
